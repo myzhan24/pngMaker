@@ -17,7 +17,8 @@ public class PngColor {
 	private String para;
 	//= Color.HSBtoRGB(0f, 0.938f, 90);
 	//Color nRGB = new Color((rgb));
-	private int[][] legendMap = new int[430][60];
+	private int[][] legendMap = new int[510][60];
+	private String[] lengNum= new String[7];
 	public PngColor()
 	{
 		
@@ -25,6 +26,10 @@ public class PngColor {
 	
 	//input: a series of data
 	//convert the attribute value into color
+	public String[] getLegend()
+	{
+		return lengNum;
+	}
 	public PngColor(float inMin, float inMax)
 	{
 		this.max = inMax;
@@ -61,7 +66,7 @@ public class PngColor {
 		return rgb;
 	}
 	
-	public void createLegend(String location)
+	/*public void createLegend(String location)
 	{
 		for(int i=0 ; i <legendMap.length; i++)
 		{
@@ -82,6 +87,36 @@ public class PngColor {
 		for(int k = 0 ; k <lengNum.length; k++)
 		{
 			float inLegend =  this.min+(this.max-this.min)/11f*k;
+			DecimalFormat myformat=new DecimalFormat("0.000"); 
+			lengNum[k] = (myformat.format(inLegend));
+		}
+		if(this.para!=null)
+		pg.createImage(this.legendMap, legend,lengNum,para);
+		else
+			pg.createImage(this.legendMap, legend,lengNum);
+	}*/
+	public void myCreateLegend(String location)
+	{
+		for(int i=0 ; i <legendMap.length; i++)
+		{
+			for(int j=0; j< legendMap[i].length; j++)
+			{
+				if(i<10||i>502)
+					legendMap[i][j]=-1;
+				else{
+				float normal =(float) ((i-10)*1.0/(legendMap.length-20));
+				legendMap[i][j]=  Color.HSBtoRGB((1f-normal)/1.5f, 0.94f, 0.5f+normal*0.33f);
+				}
+			}
+		}
+		
+		File legend = new File(location);
+		PngWriter pg = new PngWriter();
+		//String[] lengNum = new String[7];
+		System.out.println(""+this.max+" "+this.min+" "+(this.max-this.min));
+		for(int k = 0 ; k <lengNum.length; k++)
+		{
+			float inLegend =  this.min+(this.max-this.min)/6f*k;
 			DecimalFormat myformat=new DecimalFormat("0.000"); 
 			lengNum[k] = (myformat.format(inLegend));
 		}
