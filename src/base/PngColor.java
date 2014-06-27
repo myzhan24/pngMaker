@@ -113,7 +113,7 @@ public class PngColor {
 		File legend = new File(location);
 		PngWriter pg = new PngWriter();
 		//String[] lengNum = new String[7];
-		System.out.println(""+this.max+" "+this.min+" "+(this.max-this.min));
+		//System.out.println(""+this.max+" "+this.min+" "+(this.max-this.min));
 		for(int k = 0 ; k <lengNum.length; k++)
 		{
 			float inLegend =  this.min+(this.max-this.min)/6f*k;

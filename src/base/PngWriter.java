@@ -14,17 +14,11 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.ArrayDeque;
-import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Comparator;
-import java.util.Deque;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.NavigableSet;
+import java.util.List;
+import java.util.Map.Entry;
+import java.util.Scanner;
 import java.util.TreeMap;
-import java.util.TreeSet;
 
 import javax.imageio.*;
 
@@ -40,9 +34,17 @@ public class PngWriter {
 			{
 				public int compare(Float a, Float b)
 				{
-					return (int)(a.compareTo(b));
+					return (a.compareTo(b));
 				}
 			};
+			
+			static Comparator<Double> myCompD = new Comparator<Double>()
+					{
+						public int compare(Double a, Double b)
+						{
+							return (int)(a.compareTo(b));
+						}
+					};
 	private File outFile = null;
 	private File fi = null;
 	private BufferedImage bi = null;
@@ -58,7 +60,6 @@ public class PngWriter {
 	}
 	public PngWriter(String inputImage)
 	{
-		System.out.println("yesyaas");
 		fi =  new File(inputImage);
 		try {
 			System.out.println(fi.getAbsolutePath());
@@ -82,7 +83,6 @@ public class PngWriter {
 				}
 			}
 			outFile = new File("sdg.png");
-			System.out.println("yesys");
 			this.createImage(rgb,outFile);
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
@@ -286,9 +286,7 @@ BufferedImage buffer = new BufferedImage(irgb.length,irgb[0].length,BufferedImag
 			if(f > max)
 				max = f;
 			
-			System.out.println(f);
 		}
-		System.out.println(max);
 		return max;
 		
 	}
@@ -325,203 +323,600 @@ BufferedImage buffer = new BufferedImage(irgb.length,irgb[0].length,BufferedImag
 	}
 	public static float getDistance(int x1, int y1,int x2,int y2)
 	{
-		return (float)Math.sqrt( (x2-x1)*(x2-x1) + (y2-y1)*(y2-y1)    );
+		return (float)Math.sqrt( ((float)(x2-x1))*((float)(x2-x1)) + ((float)(y2-y1))*((float)(y2-y1))    );
 	}
-	public static ArrayFloat.D2 generateIDWArray(ArrayFloat.D2 ar, int scale, int numNearest, int factor)
+	public static float getDistance(float x1, float y1,float x2,float y2)
+	{
+		return (float)Math.sqrt((x2-x1)*(x2-x1) + (y2-y1)*(y2-y1));
+	}
+	public static float getDistance(int x1,int y1, FloatCoordinate floatCoordinate)
+	{
+		return (float)Math.sqrt( (floatCoordinate.getX()-x1)*(floatCoordinate.getX()-x1) + (floatCoordinate.getY()-y1)*(floatCoordinate.getY()-y1)  );
+	}
+	
+	public static double getDistance(int x1,int y1, DoubleCoordinate dc)
+	{
+		return Math.sqrt( (dc.getX()-(double)x1)*(dc.getX()-(double)x1) + (dc.getY()-(double)y1)*(dc.getY()-(double)y1)  );
+	}
+	
+	/**
+	 * generateIDWArray
+	 * Generates a larger array with interpolated data based on the Inverse Distance Weighting method
+	 * @param ar - 2D array of data
+	 * @param scale - the multiple which the data will be increased by, as well as the image size
+	 * @param expo - the specified exponent in the IDW formula
+	 * @return a new array of interpolated data
+	 */
+	public static ArrayFloat.D2 generateIDWArray(ArrayFloat.D2 ar, int scale, int expo)
 	{
 		int[] baseShape = ar.getShape();
-		ArrayFloat.D2 ret= new ArrayFloat.D2(baseShape[0]*scale,baseShape[1]*scale);
-		TreeMap<Float,IDWPoint> myTree;
+		ArrayFloat.D2 ret= new ArrayFloat.D2(baseShape[0]*scale,baseShape[1]*scale);	//new array rows and columns are a multiple of scale of the given one
 		
-		for(int i = 0 ; i < baseShape[0]; i++) //row
-		{
-			for(int j = 0; j < baseShape[1]; j++) //column
+		//the thought process behind this method is expanding and interpolating data around each old data cell and generating new data in between using IDW on neighboring cells old data
+		//the structure of this loop system
+		//outer loops: each old data cell
+		//inner loops: each of the scale x scale new cells
+		for(int i=0; i < baseShape[0];i++)			//base row
+		{	
+			for(int j=0; j < baseShape[1];j++)		//base col
 			{
-				//determine nearest y(4) base points, this includes the current i and j
-				
-				
-				 myTree = new TreeMap<Float, IDWPoint>(myComp);
-				 
-				 //puts all the distances between the base points and the current base point into a tree
-				 for(int t = 0 ; t < baseShape[0]; t++) //row
-				 {
-					 for(int y = 0; y < baseShape[1]; y++) //column
-					 {
-						// System.out.println(""+getDistance(i,j,t,y));
-						 myTree.put(getDistance(i,j,t,y), new IDWPoint(t,y,getDistance(i,j,t,y))   );
-					 }
-				 }
-				 //the tree is traversed for the first numNearest elements
-				 NavigableSet<Float> myNS = myTree.navigableKeySet();
-				/* Iterator<Float> myI = myNS.iterator();
-				 while(myI.hasNext())
-					 System.out.println(myI.next());
-				 
-				*/
-				 //System.out.println(myTree.pollFirstEntry().getValue().getDistance());
-				 
-				 //System.out.println("********");
-				// System.out.println(""+myTree.size());
-				ArrayList<IDWPoint> neighbors= new ArrayList<IDWPoint>();
-				for(int asdf =0 ; asdf< numNearest;asdf++)
+				//get all valid neighboring base points
+				FloatCoordinateSystem myFCS = new FloatCoordinateSystem(baseShape[0],baseShape[1]);
+				myFCS.addNeighbors(i,j,ar);	//adds all valid neighbors and holds the old data value, max 8 neighbors
+				myFCS.scaleCenter(scale);		//expands the coordinate system to the scale of the new array and centers each old data point
+ 				
+				float numer;
+				float denom;
+				float dist;
+				float tempDenom;
+				FloatCoordinate tempFC;
+				//for each new cell, apply the IDW method to the neighbors to generate a new data point
+				for(int a=0; a< scale; a++)
 				{
-					neighbors.add(myTree.pollFirstEntry().getValue());
-				}
-				myTree.pollFirstEntry().getValue();
-				for(int a = 0; a < scale; a++)	//inner row
-				{
-					for(int b = 0; b < scale; b++) //inner column
+					for(int b=0; b< scale; b++)
 					{
-						/*if(a==0 && b==0)
+						numer=0;
+						denom=0;
+						tempDenom=0;
+						dist=0;
+						//(sum of value/dist^n )/ (sum of 1/dist&n) 
+						for(int fcs =0; fcs<myFCS.size();fcs++)
 						{
-							ret.set(i*scale, j*scale, ar.get(i, j));
-						}
-						else*/
-						{
-							float numer=0;
-							float denom=0;
-							float dist=0;
-							//TreeMap<Float,IDWPoint> myTempTree = (TreeMap<Float, IDWPoint>) myTree.clone();
+							tempFC = myFCS.get(fcs);
+							dist = getDistance(i*scale+a,j*scale+b,tempFC);		//distance between new cell and old cell
+							tempDenom = (float) (1.0/Math.pow(dist, expo));
 							
-							IDWPoint p;
-							for(int nu =0 ; nu < numNearest; nu++)
-							{
-								p=neighbors.get(nu);
-							//	System.out.print(p.getDistance()+", \t");
-								dist=getDistance(p.getX()*scale+scale/2,p.getY()*scale+scale/2,i*scale+a,j*scale+b);
-								numer+= ar.get(p.getX(),p.getY())/(Math.pow(dist, factor));
-								denom+= 1.0/(Math.pow(dist, factor));
-							}
-							ret.set(i*scale+a, j*scale+b, numer/denom);
-							//System.out.println("");
-							
+							numer+= tempFC.getValue() * tempDenom;
+							denom+= tempDenom;
 						}
+						//once neighbors are done, account for the old cell the new cell is currently in
+						dist= getDistance(i*scale+a,j*scale+b,i*scale+scale/2.0f,j*scale+scale/2.0f);
+						if(dist==0)	// if the new cell corresponds to the old cell, use a dummy distance
+							dist=1f;
+						tempDenom = (float) (1.0/Math.pow(dist, expo));
+						numer+= ar.get(i, j) * tempDenom;
+						denom+= tempDenom;
+						ret.set(i*scale+a, j*scale+b, numer/denom);	//add the new data point
 					}
 				}
+				
 			}
 		}
 		return ret;
 		
 	}
 	
+	/**
+	 * generateIDWArrayRandom applies the same method as generateIDWArray except the expanding of the old data point has a random location within its own grid when interpolating the new data
+	 * @param ar
+	 * @param scale
+	 * @param expo
+	 * @return
+	 */
+	public static ArrayFloat.D2 generateIDWArrayRandom(ArrayFloat.D2 ar, int scale, int expo)
+	{
+		int[] baseShape = ar.getShape();
+		ArrayFloat.D2 ret= new ArrayFloat.D2(baseShape[0]*scale,baseShape[1]*scale);	//new array rows and columns are a multiple of scale of the given one
+		
+		//the thought process behind this method is expanding and interpolating data around each old data cell and generating new data in between using IDW on neighboring cells old data
+		//the structure of this loop system
+		//outer loops: each old data cell
+		//inner loops: each of the scale x scale new cells
+		for(int i=0; i < baseShape[0];i++)			//base row
+		{	
+			for(int j=0; j < baseShape[1];j++)		//base col
+			{
+				//get all valid neighboring base points
+				FloatCoordinateSystem myFCS = new FloatCoordinateSystem(baseShape[0],baseShape[1]);
+				myFCS.addGrid(i,j,ar);	//adds all valid neighbors and holds the old data value, max 8 neighbors
+				myFCS.scaleCenter(scale);		//expands the coordinate system to the scale of the new array and centers each old data point
+ 				
+				float numer;
+				float denom;
+				float dist;
+				float tempDenom;
+				FloatCoordinate tempFC;
+				//for each new cell, apply the IDW method to the neighbors to generate a new data point
+				for(int a=0; a< scale; a++)
+				{
+					for(int b=0; b< scale; b++)
+					{
+						numer=0;
+						denom=0;
+						tempDenom=0;
+						dist=0;
+						//(sum of value/dist^n )/ (sum of 1/dist&n) 
+						for(int fcs =0; fcs<myFCS.size();fcs++)
+						{
+							tempFC = myFCS.get(fcs);
+							dist = getDistance(i*scale+a,j*scale+b,tempFC);		//distance between new cell and old cell
+							if(dist==0)	// if the new cell corresponds to the old cell, use a dummy distance
+								dist=1f;
+							
+							tempDenom = (float) (1.0/Math.pow(dist, expo));
+							numer+= tempFC.getValue() * tempDenom;
+							denom+= tempDenom;
+						}
+						//once neighbors are done, account for the old cell the new cell is currently in
+						
+						ret.set(i*scale+a, j*scale+b, numer/denom);	//add the new data point
+					}
+				}
+				
+			}
+		}
+		return ret;
+	}
+
+	/**
+	 * generateIDWArrayMin
+	 * This is a method of IDW interpolation to generate a larger array of interpolated data based on a given array. 
+	 * The given data is scaled up with slight variation, then each new data point is calculated using the IDW formula on 
+	 * given data points that are within a range of scale * thresholdFactor.
+	 * @param ar				-original data
+	 * @param scale				-new array dimensions of scale*given data dimension
+	 * @param expo				-specified exponent in the IDW formula, not currently used in this implementation
+	 * @param thresholdFactor	-range that the IDW interpolation use
+	 * @return					-a new ArrayFloat.D2 Array with interpolated data
+	 */
+	public static ArrayFloat.D2 generateIDWArrayMin(ArrayFloat.D2 ar, int scale, int expo, float thresholdFactor)
+	{
+		int[] baseShape = ar.getShape();
+		FloatCoordinateSystem myFCS = new FloatCoordinateSystem(baseShape[0], baseShape[1]);
+		ArrayFloat.D2 ret = new ArrayFloat.D2(baseShape[0] * scale, baseShape[1] * scale);
+		
+		//load the data into an FloatCoordinateSystem ArrayList
+		for(int i = 0; i < baseShape[0]; i ++)
+			for(int j = 0; j < baseShape[1]; j++)
+				myFCS.addCoor(i, j, ar.get(i, j));
+			
+		myFCS.scaleRandomCenter(scale);
+		TreeMap<Float, FloatCoordinate> myTree;				//go through each new cell of the new array and generate an interpolated point
+		int[] shape = ret.getShape();
+		
+		
+		float numer;
+		float denom;
+		float dist=0;
+		float tempDenom;
+		Entry<Float, FloatCoordinate> myE;
+		for(int i =0; i < shape[0]; i++)		//row
+		{	
+			for(int j = 0; j < shape[1]; j++)	//col
+			{
+				myTree = new TreeMap<Float, FloatCoordinate>(myComp);	//add each data point to a tree map, whose compare is based on the distance between the current cell and each old data point
+				
+				//float minDist=Float.MAX_VALUE;
+				//FloatCoordinate minFC=new FloatCoordinate();
+				for(FloatCoordinate fc : myFCS.getArray())
+				{
+					dist=getDistance(i,j,fc.getX(),fc.getY());
+					if(dist < scale*thresholdFactor)
+						myTree.put(dist, fc);
+					
+				/*	if(minDist > dist)
+					{
+						minDist=dist;
+						minFC=fc;
+					}*/
+				}
+				numer=0;
+				denom=0;
+				myE = myTree.pollFirstEntry();
+				while(myE!=null)
+				{
+					dist = myE.getKey();
+					if(dist<scale/thresholdFactor/2f)							//special case if the current cell corresponds to an old data cell's location
+					{
+						//dist*=scale/(thresholdFactor*thresholdFactor);
+						
+						dist=scale/thresholdFactor/2f;
+					}
+				
+					tempDenom = (1.0f/dist);
+					numer+=myE.getValue().getValue()*tempDenom;	//applying the IDW formula
+					denom+=tempDenom;
+					myE = myTree.pollFirstEntry();
+					
+				}
+				
+		/*		if(dist<1f)
+				{
+					//ret.set(i, j, myE.getValue().getValue());	
+					ret.set(i,j,0f);
+				}
+				else*/
+					ret.set(i, j, numer/denom);				//store the interpolated data point into the new array
+				
+			}
+		}
+		return ret;
+	}
+	
+	public static ArrayFloat.D2 generateIDWArrayMinTrue(ArrayFloat.D2 ar, int scale, int expo, float thresholdFactor)
+	{
+		int[] baseShape = ar.getShape();
+		FloatCoordinateSystem myFCS = new FloatCoordinateSystem(baseShape[0], baseShape[1]);
+		ArrayFloat.D2 ret = new ArrayFloat.D2(baseShape[0] * scale, baseShape[1] * scale);
+		
+		//load the data into an FloatCoordinateSystem ArrayList
+		for(int i = 0; i < baseShape[0]; i ++)
+			for(int j = 0; j < baseShape[1]; j++)
+				myFCS.addCoor(i, j, ar.get(i, j));
+			
+		myFCS.scaleRandomCenter(scale);
+		TreeMap<Float, FloatCoordinate> myTree;				//go through each new cell of the new array and generate an interpolated point
+		int[] shape = ret.getShape();
+		
+		
+		float numer;
+		float denom;
+		float dist=0;
+		float tempDenom;
+		Entry<Float, FloatCoordinate> myE;
+		for(int i =0; i < shape[0]; i++)		//row
+		{	
+			for(int j = 0; j < shape[1]; j++)	//col
+			{
+				myTree = new TreeMap<Float, FloatCoordinate>(myComp);	//add each data point to a tree map, whose compare is based on the distance between the current cell and each old data point
+				
+				//float minDist=Float.MAX_VALUE;
+				//FloatCoordinate minFC=new FloatCoordinate();
+				for(FloatCoordinate fc : myFCS.getArray())
+				{
+					dist=getDistance(i,j,fc.getX(),fc.getY());
+					if(dist < scale*thresholdFactor)
+						myTree.put(dist, fc);
+					
+				/*	if(minDist > dist)
+					{
+						minDist=dist;
+						minFC=fc;
+					}*/
+				}
+				numer=0;
+				denom=0;
+				myE = myTree.pollFirstEntry();
+				while(myE!=null)
+				{
+					dist = myE.getKey();
+					if(dist==0)							//special case if the current cell corresponds to an old data cell's location
+					{
+						//dist*=scale/(thresholdFactor*thresholdFactor);
+						
+						dist=0.01f;
+					}
+				
+					tempDenom = (1.0f/dist);
+					numer+=myE.getValue().getValue()*tempDenom;	//applying the IDW formula
+					denom+=tempDenom;
+					myE = myTree.pollFirstEntry();
+					
+				}
+				
+		/*		if(dist<1f)
+				{
+					//ret.set(i, j, myE.getValue().getValue());	
+					ret.set(i,j,0f);
+				}
+				else*/
+					ret.set(i, j, numer/denom);				//store the interpolated data point into the new array
+				
+			}
+		}
+		return ret;
+	}
+	
+	public static ArrayFloat.D2 generateIDWArrayNeighbor(ArrayFloat.D2 ar, int scale, int expo,int numNearest, float percent)
+	{
+		int[] baseShape = ar.getShape();
+		FloatCoordinateSystem myFCS = new FloatCoordinateSystem(baseShape[0], baseShape[1]);
+		ArrayFloat.D2 ret = new ArrayFloat.D2(baseShape[0] * scale, baseShape[1] * scale);
+		
+		//load the data into an FloatCoordinateSystem ArrayList
+		for(int i = 0; i < baseShape[0]; i ++)
+		{
+			for(int j = 0; j < baseShape[1]; j++)
+			{
+				myFCS.addCoor(i, j, ar.get(i, j));
+			}
+		}
+		//System.out.println(baseShape[0]);
+		int total = (int)(percent*((float)baseShape[0]*baseShape[1]));
+		//System.out.println(myFCS.size()+" "+baseShape[0]*baseShape[1]);
+		while(myFCS.size() > total)							//cut out data points randomly until a percent of the original amount is left
+		{
+			myFCS.remove((int)(Math.random() * myFCS.size()));
+		}
+		//System.out.println(myFCS.size()+" "+total);
+		myFCS.scaleCenter(scale);
+		int[] shape = ret.getShape();
+		for(int i =0; i < shape[0]; i++)		//row
+		{	
+			for(int j = 0; j < shape[1]; j++)	//col
+			{
+				FloatCoordinateSystem newFCS = determineNeighbors(i,j,myFCS,numNearest);
+				
+				float numer=0;
+				float denom=0;
+				float tempDenom;
+				float dist;
+				FloatCoordinate myFC;
+				for(int a = 0; a< newFCS.size(); a++)
+				{	
+					myFC=newFCS.get(a);
+					dist = getDistance(i,j,myFC);
+					if(dist==0)							//special case if the current cell corresponds to an old data cell's location
+						dist=0.001f;	
+						
+					tempDenom = (float) (1.0f/Math.pow(dist, expo));
+					numer+=myFC.getValue()*tempDenom;	//applying the IDW formula
+					denom+=tempDenom;
+				}
+				//System.out.println(numer/denom);
+				ret.set(i, j, numer/denom);				//store the interpolated data point into the new array
+			}
+		}
+		return ret;
+	}
+	
+	
+	public static FloatCoordinateSystem determineNeighbors(float r, float c,FloatCoordinateSystem myFCS, int numNearest)
+	{
+		FloatCoordinateSystem ret = new FloatCoordinateSystem(myFCS, false);
+		int dir=3; // 0 up, 1 left, 2 down, 3 right
+		int stepSize=1;
+		int stepCount=0;
+		float row=r;
+		float col=c;
+		
+		if(myFCS.isValidPoint(row, col) && myFCS.containsPointAndStore(row, col)){
+			ret.addFloatCoordinate(myFCS.getLastFound());
+		}
+		
+		while(ret.size() < numNearest)
+		{
+			//System.out.println(dir);
+			stepCount++;
+			if(dir==0)		//up
+			{
+				row--;
+				if(myFCS.isValidPoint(row, col))
+				{
+					if(myFCS.containsPointAndStore(row, col))
+						ret.addFloatCoordinate(myFCS.getLastFound());
+				}
+				else
+				{
+					row = row - (stepSize-stepCount);
+					stepCount = stepSize;
+				}		
+				
+				if(stepCount >= stepSize)
+				{
+					dir=1;
+					stepCount=0;
+					stepSize++;
+				}
+			}
+			else if(dir==1)	//left
+			{
+				col--;
+				if(myFCS.isValidPoint(row, col))
+				{
+					if(myFCS.containsPointAndStore(row, col))
+						ret.addFloatCoordinate(myFCS.getLastFound());
+				}
+				else
+				{
+					col = col - (stepSize-stepCount);
+					stepCount = stepSize;
+				}
+				if(stepCount >= stepSize)
+				{
+					dir=2;
+					stepCount=0;
+				}
+			}
+			else if(dir==2)	//down
+			{
+				row++;
+				if(myFCS.isValidPoint(row, col))
+				{
+					if(myFCS.containsPointAndStore(row, col))
+						ret.addFloatCoordinate(myFCS.getLastFound());
+				}
+				else
+				{
+					row = row + (stepSize-stepCount);
+					stepCount = stepSize;
+				}
+				if(stepCount >= stepSize)
+				{
+					dir=3;
+					stepCount=0;
+					stepSize++;
+				}
+			}
+			else			//right
+			{
+				col++;
+				if(myFCS.isValidPoint(row, col))
+				{
+					if(myFCS.containsPointAndStore(row, col))
+						ret.addFloatCoordinate(myFCS.getLastFound());
+				}
+				else
+				{
+					col = row + (stepSize-stepCount);
+					stepCount = stepSize;
+				}
+				if(stepCount >= stepSize)
+				{
+					dir=0;
+					stepCount=0;
+				}
+			}
+		}
+	//	System.out.println("FINISH");
+		return ret;
+	}
+	
+	
 	 public static void main(String[] args){
 		NetcdfFile dataFile = null;
 		try
 		{
-			dataFile =  NetcdfFile.open("test.nc", null);
-			// PngWriter png = new PngWriter("test.png");
-			 //PngWriter png = new PngWriter("test.nc");
-		
-			 Variable dataVar = dataFile.findVariable("tgrnd");
-			 int[] origin = new int[3];
-			 int[] shape =  dataVar.getShape();
-			 //System.out.println(shape[0]+" "+shape[1]+" "+shape[2]+" ");
-			 ArrayFloat.D2 myF = new ArrayFloat.D2(shape[1], shape[2]);
+			Scanner scanner = new Scanner( System.in );
 			
-			 ArrayFloat.D3 lel =((ArrayFloat.D3) dataVar.read(origin, dataVar.getShape()));
-			 
-			 for(int i = 0; i < shape[1];i++)
-			 {
-				 for(int j = 0; j < shape[2]; j++)
-				 {
-					 myF.set(i, j, lel.get(0, i, j));
-					 //System.out.println(lel.get(0,i,j));
-				 }
-			 }
-			 
-			 float max = findMaxVal(myF);
-			 float min = findMinVal(myF);
-			 System.out.println(min+" "+max+" "+shape[1]+" "+shape[2]);
-			 PngColor col = new PngColor(min,max,"tgrnd");
-			 col.myCreateLegend("legendaryg.png");
-			 
-			/*rgb = new int[shape[1]][shape[2]];
-			 for(int i = 0; i < shape[1];i++)
-			 {
-				 for(int j = 0; j < shape[2]; j++)
-				 {
-					rgb[i][j]=col.getColorRGB(myF.get(i,j));
-					 //System.out.println(lel.get(0,i,j));
-				 }
-			 }*/
-			 
-			 rgb = new int[shape[2]][shape[1]];
-			 for(int i = 0; i < shape[2];i++)
-			 {
-				 for(int j = 0; j < shape[1]; j++)
-				 {
-					rgb[i][j]=col.getColorRGB(myF.get((shape[1]-1)-j,i));
-					 //System.out.println(lel.get(0,i,j));
-				 }
-			 }
-			/* int wi = 720;
-			 int he = 460;
-			 rgb = new int[wi][he];
-			 float range = max-min;
-			 for(int i = 0; i < wi; i++)
-			 {
-				 for(int j = 0; j < he;j++)
-				 {
-					 rgb[i][j]=col.getColorRGB((float) ((Math.random()*range) +min));
-				 }
-			 }*/
-			PngWriter png = new PngWriter("testerino",(shape[1]*3),(shape[2]*3));
-			
-			
-			for(int a=0;a<40;a=a+5)
+			String filename = "test3.nc";
+			boolean cont=true;
+			boolean restart=false;
+			while(cont)
 			{
-			ArrayFloat.D2 testerino = generateIDWArray(myF,30,4,a);
-			shape=testerino.getShape();
-		/*	 max = findMaxVal(myF);
-			 min = findMinVal(myF);
-			// System.out.println(min+" "+max+" "+shape[1]+" "+shape[2]);
-			  col = new PngColor(min,max,"tgrnd");
-			 col.myCreateLegend("legendarygBIG.png");*/
-			 
-		
-			 
-			 rgb = new int[shape[1]][shape[0]];
-			 for(int i = 0; i < shape[1];i++)
-			 {
-				 for(int j = 0; j < shape[0]; j++)
-				 {
-					rgb[i][j]=col.getColorRGB(testerino.get((shape[0]-1)-j,i));
-					 //System.out.println(lel.get(0,i,j));
-				 }
-			 }
-			PngWriter png2 = new PngWriter("testerinoBIGBIG4pow"+a,(shape[0]*3),(shape[1]*3));
-		}
-			/*		ArrayFloat.D2 tet = new ArrayFloat.D2(10, 10);
-			for(int i=0; i < 10; i ++)
+				restart=false;
+			String var = "topog";
+			String outfilename = var;
+			
+			dataFile =  NetcdfFile.open(filename, null);
+			List<Variable> myL = dataFile.getVariables();
+			System.out.print("Type variable name or la to list all varibles: ");
+			String input = scanner.nextLine();
+			if(input.equals("la"))
 			{
-				for(int j =0; j< 10; j ++)
+				System.out.println("\n=======all variables=======");
+				for(Variable s: myL)
+					System.out.println(s.getFullName()+":                    \t"+s.getDescription());
+				
+				restart=true;
+				cont=true;
+				System.out.println("=======all variables=======\n");
+			}
+			
+			if(restart==false)
+			{
+			
+			boolean found = false;
+			Variable sa = null;
+			for( Variable s: myL)
+			{
+				if(input.equals(s.getFullName()))
 				{
-					tet.set(i, j, i+j);
+					var = input;
+					outfilename= s.getDescription();
+					found=true;
+					sa=s;
+					break;
 				}
 			}
-			ArrayFloat.D2 tes = generateIDWArray(tet,2,4);*/
+			if(!found)
+			{
+				System.out.println("Could not find your variable: "+input);
+			}
 			
+			else
+			{
+				System.out.println("You've requested "+sa.getDescription()+" ("+input+"). Please wait a moment...");
+			
+			
+			Variable dataVar = dataFile.findVariable(var);
+			
+			int[] origin = new int[3];
+			int[] shape = dataVar.getShape();
+			
+			ArrayFloat.D2 myF = new ArrayFloat.D2(shape[1], shape[2]);
+			ArrayFloat.D3 dataArray = (ArrayFloat.D3) dataVar.read(origin, dataVar.getShape());
+		
+
+			//transfer the 3D array data into a 2D array data
+			for(int i =0 ; i < shape[1]; i++) //latitude 
+			{
+				for(int j = 0 ; j < shape[2]; j++) //longitude
+				{
+					myF.set(i,j,dataArray.get(0,i,j));
+				}
+			}
+			
+			float max = findMaxVal(myF);
+			float min = findMinVal(myF);
+			
+			//create a PngColor
+			PngColor col = new PngColor(min,max,var);
+			
+			
+			rgb = new int[shape[2]][shape[1]];
+			for(int i = 0; i < shape[2];i++)
+			{
+				for(int j = 0; j < shape[1]; j++)
+				{
+					rgb[i][j]=col.getColorRGB(myF.get((shape[1]-1)-j,i));
+				}
+			}
+			PngWriter png1 = new PngWriter(outfilename,(shape[1]),(shape[0]));
+			
+			//col.myCreateLegend("legend.png");	//create a legend
+			
+			//rgb for base image
 			/*
-			int[] tetshape = tet.getShape();
-			for(int i=0;i<tetshape[0];i++)
+			rgb = new int[shape[2]][shape[1]]; //assign the netCDF data into the rgb values
+												//lat comes first but must be the Y values, so it is switched here
+			for(int i = 0; i < shape[2];i++)
 			{
-				System.out.print("[");
-				for(int j=0;j<tetshape[1];j++)
+				for(int j = 0; j < shape[1]; j++)
 				{
-				//	System.out.print(tet.get(i,j)+", \t");
+					rgb[i][j]=col.getColorRGB(myF.get((shape[1]-1)-j,i));
 				}
-				System.out.println("]");
-			}*/
-			/*int[] tesshape = tes.getShape();
-			for(int i=0;i<tesshape[0];i++)
-			{
-				System.out.print("[");
-				for(int j=0;j<tesshape[1];j++)
+			}			*/
+			
+			int scale =8;
+			int expo = 1;
+			float threshold = 1.15f;
+			StopWatch myWatch = new StopWatch();
+			
+			
+				myWatch.start();
+				ArrayFloat.D2 IDWArray = generateIDWArrayMin(myF, scale, expo, threshold);
+				shape = IDWArray.getShape();
+				
+				//rgb for IDW generated image
+				rgb = new int[shape[1]][shape[0]];
+				for(int i = 0; i < shape[1];i++)
 				{
-					System.out.print(String.format("%2.5f",tes.get(i,j))+", \t");
+					for(int j = 0; j < shape[0]; j++)
+					{
+						rgb[i][j]=col.getColorRGB(IDWArray.get((shape[0]-1)-j,i));
+					}
 				}
-				System.out.println("]");
-			}*/
+				PngWriter png2 = new PngWriter(outfilename+"x"+scale,(shape[1]),(shape[0]));
+				myWatch.stop();
+				System.out.println("\ndone!\n");
+				System.out.println("Images: "+outfilename+".png and "+outfilename+"x"+scale+".png created!");
+				System.out.println("=======time report=======");				System.out.println("Time: "+myWatch.getElapsedTime()+"ms");
+				System.out.println("scale: "+scale+"\tthreshold: "+String.format("%1.2f", threshold));
+				System.out.println("=======time report=======\n\n");				myWatch.reset();
+			}
+			}
+			}
 			
 		} 
 		catch (java.io.IOException e) 
@@ -547,6 +942,8 @@ BufferedImage buffer = new BufferedImage(irgb.length,irgb[0].length,BufferedImag
 		   {
 		     ioe.printStackTrace();
 		   }
+		   
+		 
 		}
 		
 	 }
