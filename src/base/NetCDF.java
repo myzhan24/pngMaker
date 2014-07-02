@@ -3,8 +3,12 @@ package base;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.List;
+import java.util.Queue;
 import java.util.Scanner;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 import ucar.nc2.Attribute;
 import ucar.nc2.Dimension;
@@ -18,6 +22,8 @@ import ucar.nc2.dataset.VariableDS;
 import ucar.nc2.dt.grid.GridDataset;
 import ucar.ma2.*;
 import ucar.ma2.ArrayFloat.D1;
+import ucar.ma2.ArrayFloat.D2;
+import ucar.ma2.ArrayFloat.D3;
 
 @SuppressWarnings("deprecation")
 public class NetCDF
@@ -98,7 +104,7 @@ public class NetCDF
 		}
     }
     
-	public static void parseNetCDFDimensions(String fileName)
+	public static void parseDimensions(String fileName)
 	{
 		NetcdfFile dataFile = null;
 		try
@@ -154,7 +160,11 @@ public class NetCDF
 	}
 	
 	
-	
+	/**
+	 * old function
+	 * @param fileName
+	 * @param var
+	 */
     public static void parseNetCDFVar(String fileName, String var)
 	{
 		NetcdfFile dataFile = null;
@@ -218,6 +228,12 @@ public class NetCDF
 		   }
 		}
 	}
+    /**
+     * writeNetCDFAverage
+     * a skeleton function that writes a new NetCDF file that only contains the average data of the specified variable over the time dimension
+     * @param fileName
+     * @param var
+     */
 	public static void writeNetCDFAverage(String fileName, String var)
 	{
 		// Create the file.
@@ -251,19 +267,7 @@ public class NetCDF
         	dims.add(lon);
         	
         	existingDataFile = NetcdfFile.open(fileList.get(0), null);
-        	/*
-        	for(Dimension d : existingDataFile.getDimensions())
-        	{
-        		if(d.getShortName().equals("time"))
-        			dataFile.addDimension(d.getShortName(), 1 );	
-        			
-        		else
-        			dataFile.addDimension(d.getShortName(), d.getLength() );		
-        	}
-            
-*/
-        	
-        	System.out.println(existingDataFile.getCacheName());
+
             // add the variable into the new netcdf
         	dataFile.addVariable(var, DataType.FLOAT, dims);
         	
@@ -278,35 +282,6 @@ public class NetCDF
         			dataFile.addVariableAttribute(var, s.getShortName(),s.getNumericValue());
         	}
         	
-        	
-
-        	// This is the data array we will write. It will just be filled
-        	// with a progression of numbers for this example.
-           // ArrayFloat.D3 dataOut = new ArrayFloat.D3(  tim.getLength(),lat.getLength(), lon.getLength());
-
-            // Create some pretend data. If this wasn't an example program, we
-            // would have some real data to write, for example, model output.
-            /*int i,j;
-           
-            for (i=0; i<xDim.getLength(); i++) {
-                 for (j=0; j<yDim.getLength(); j++) {
-                     dataOut.set(i,j, i * NY + j);
-                 }
-            }*/
-           // System.out.println(tim.getLength()+" "+lat.getLength()+" "+lon.getLength());
-            /*for(int i=0; i < tim.getLength();i++)
-            {
-            	for(int j= 0 ; j < lat.getLength();j++)
-            	{
-            		for(int k = 0; k < lon.getLength();k++)
-            		{
-            			//System.out.println(i+" "+j+" "+k);
-            			dataOut.set(i,j,k, sumOfData[j][k]);
-            			//System.out.println(sumOfData[j][k]);
-            		}
-            	}
-            }*/
-            
             for(Dimension d : existingDataFile.getDimensions())
         	{
             	try
@@ -373,31 +348,175 @@ public class NetCDF
         			}
         	}
 	}
-	public static ArrayFloat.D1 generateAverageArrayD1(String var)
+	/**
+	 * calculateMean
+	 * Calculates the mean value of a 3D float array
+	 * @param ar	ArrayFloat.D3 array of values
+	 * @return		the mean as a float
+	 */
+	public static float calculateMean(ArrayFloat.D3 ar)
 	{
-		ArrayFloat.D1 ret = new ArrayFloat.D1(1);
+		float ret = 0f;
+		int[] shape = ar.getShape();
+		float total = shape[0] * shape[1] * shape[2];
+		
+		for(int i = 0; i < shape[0];i++)
+		{
+			for(int j = 0; j < shape[1] ; j++)
+			{
+				for(int k = 0; k < shape[2]; k++)
+				{
+					ret+=ar.get(i,j,k);
+				}
+			}
+		}
+		return ret/total;
+	}
+	
+	public static float calculateMean(ArrayFloat.D2 ar)
+	{
+		float ret = 0f;
+		int[] shape = ar.getShape();
+		float total = shape[0] * shape[1];
+		
+		for(int i = 0; i < shape[0];i++)
+		{
+			for(int j = 0; j < shape[1] ; j++)
+			{			
+				ret+=ar.get(i,j);
+			}
+		}
+		return ret/total;
+	}
+	
+	public static float calculateAreaWeightedMean(ArrayFloat.D2 data, ArrayFloat.D1 areas)
+	{
+		float ret = 0f;
+		float areaSum =0f;
+		int[] dataShape = data.getShape();
+		
+		for(int i=0; i < dataShape[0]; i++)			//latitude
+		{
+			for(int j= 0; j < dataShape[1]; j++)	//longitude
+			{
+				ret+= data.get(i,j) * areas.get(i); //sum of DATAij * AREAi; data and corresponding area weight of latitude amount
+				areaSum+= areas.get(i);
+			}
+		}
+		
+		return ret/areaSum;
+		
+		
+	}
+	public static float calculateStandardDeviation(ArrayFloat.D2 ar, float mean)
+	{
+		float ret= 0;
+		int[] shape = ar.getShape();
+		for(int i = 0; i < shape[0] ; i++)
+		{
+			for(int j = 0 ; j < shape[1] ; j++)
+			{
+				ret += (ar.get(i,j) - mean)*(ar.get(i,j) - mean);
+			}
+		}
+		ret = ret/((float)shape[0]*shape[1]);
+		ret = (float) Math.sqrt(ret);
 		return ret;
 	}
-	public static ArrayFloat.D2 generateAverageArrayD2(String var)
+	
+	public static ArrayFloat.D1 generateArrayD1(String var)
 	{
-		ArrayFloat.D2 ret = new ArrayFloat.D2( latitude, longitude);
+		NetcdfFile dataFile = null;
+		ArrayFloat.D1 ret = null;
+		try
+		{
+			int[] origin = new int[1];
+			dataFile = NetcdfFile.open(fileList.get(0));
+			Variable dataVar = dataFile.findVariable(var);
+			if (dataVar == null)
+			{
+				System.out.println("Cant find Variable data " + var);
+				return ret;
+		    }
+			ret = (ArrayFloat.D1) dataVar.read(origin, dataVar.getShape());
+		}
+		catch(Exception e)
+		{
+			if (dataFile != null)
+		   try 
+		   {
+		     dataFile.close();
+		   } 
+		   catch (IOException ioe) 
+		   {
+		     ioe.printStackTrace();
+		   }
+		}
 		return ret;
 	}
+	public static ArrayFloat.D2 generateArrayD2(String var)
+	{
+		NetcdfFile dataFile = null;
+		ArrayFloat.D2 ret = null;
+		try
+		{
+			int[] origin = new int[2];
+			dataFile = NetcdfFile.open(fileList.get(0));
+			Variable dataVar = dataFile.findVariable(var);
+			//System.out.println(dataVar.read(origin,dataVar.getShape()).toString());
+			if (dataVar == null)
+			{
+				System.out.println("Cant find Variable data " + var);
+				return ret;
+		    }
+			ret = (ArrayFloat.D2) dataVar.read(origin, dataVar.getShape());
+		}
+		catch(Exception e)
+		{
+			if (dataFile != null)
+		   try 
+		   {
+		     dataFile.close();
+		   } 
+		   catch (IOException ioe) 
+		   {
+		     ioe.printStackTrace();
+		   }
+		}
+		return ret;
+	}
+	/**
+	 * This function searches each file in filelist.txt for the given variable name
+	 * and averages the values over the time dimension, returning a new 3D array with 
+	 * a time dimension of 1 and retains the old latitude and longitude dimensions.
+	 * @param var 	input variable to be averaged
+	 * @return ArrayFloat.D3 that averaged the values over the time dimension. Dimensions: 1 x latitude x longitude 
+	 */
 	public static ArrayFloat.D3 generateAverageArrayD3(String var)
 	{
-		ArrayFloat.D3 ret = new ArrayFloat.D3(1, latitude, longitude);
+		ArrayFloat.D3 ret =new ArrayFloat.D3(1, latitude, longitude);
 		float total=0;
 		//calculate the average of the variable across the total time period
 		NetcdfFile dataFile = null;
 		try
 		{
 			int[] shape = new int[3];
+			dataFile = NetcdfFile.open(fileList.get(0),null);
+			Variable dataVar = dataFile.findVariable(var);
+			if (dataVar == null)
+			{
+				System.out.println("Cant find Variable data " + var);
+				return ret;
+		    }
+			shape = dataVar.getShape();
+			ret = new ArrayFloat.D3(1, shape[1], shape[2]);
+			
 			for(String s : fileList)
 			{
 				dataFile = NetcdfFile.open(s, null);
-				//System.out.println(dataFile.toString());
+				//System.out.println(s);
 				// Retrieve the variable
-				Variable dataVar = dataFile.findVariable(var);
+				dataVar = dataFile.findVariable(var);
 				if (dataVar == null)
 				{
 					System.out.println("Cant find Variable data " + var);
@@ -405,41 +524,40 @@ public class NetCDF
 			    }
 			
 				// Read dimension information on the variable
-				shape = dataVar.getShape();
-				ret = new ArrayFloat.D3(1,shape[1], shape[2]);
+				//ret = new ArrayFloat.D3(1,shape[1], shape[2]);
 				int[] origin = new int[3];
 				ArrayFloat.D3 dataArray;
 				dataArray = (ArrayFloat.D3) dataVar.read(origin, shape);
 				//float[][][] dataArray = new float[shape[0]][shape[1]][shape[2]];
 				total+=time;
 				//System.out.println(shape[0]+" "+shape[1]+" "+shape[2]);
+				//System.out.println(total);
 				for(int i = 0; i< shape[0];i++)	//time
 				{
 					for(int j =0; j < shape[1]; j++) //latitude
 					{
 						for(int k = 0; k < shape[2];k++) //longitude
 						{
-							ret.set(0,j,k, ret.get(0,j,k) + dataArray.get(i,j,k));
+							ret.set(0,j,k, ret.get(0,j,k)+dataArray.get(i,j,k));
 						}
 					}
+					//System.out.println(i+" the month"+ " "+total);
 				}/*
 				System.out.println(s);
 				System.out.println(dataVar.getFullName());
 				System.out.println(dataVar.getDimensionsString());
 				System.out.println(dataVar.getDimensions().toString());
 				System.out.println("*******");
-				*/
-
-				
+				*/			
 			}
 			for(int i = 0; i < shape[1];i++)
 			{
 				for(int j = 0; j < shape[2]; j++)
 				{
-					ret.set(0,i,j, ret.get(0,i,j)/( total));
+					ret.set(0,i,j, ret.get(0,i,j)/(total));
 					//System.out.print(ret.get(0,i,j)+", \t");
 				}
-				//System.out.println();
+				//System.out.println(total);
 			}
 				
 		} 
@@ -470,6 +588,12 @@ public class NetCDF
 		
 	}
 	
+	/**
+	 * writeNetCDFAverageArray
+	 * This function creates a new NetCDF file with fileName as the output file name, currently this requires that the input includes ".nc" at the end.
+	 * This function averages all variables for all files present in filelist.txt over its time dimension as long as the variable has a time dimension.
+	 * @param fileName	output filename, requires ".nc" to be present for a correct output file format
+	 */
 	public static void writeNetCDFAverageAllVariables(String fileName)
 	{
         NetcdfFileWriteable dataFile = new NetcdfFileWriteable();	//Create the file
@@ -478,36 +602,45 @@ public class NetCDF
         try {
         	dataFile = NetcdfFileWriteable.createNew(fileName, false);
         	myDataFile = NetcdfFile.open(fileList.get(0), null);
-
-        	List<Dimension> myList = myDataFile.getDimensions();	//Global Dimensions of the new file
+        	
+        	//Define DIMENSIONS
+        	List<Dimension> myListD = myDataFile.getDimensions();	//Global Dimensions of the new file
         	int indexOfTime=0;										//determine the index of the time dimension
-        	for(Dimension d: myList)
+        	for(Dimension d: myListD)
         	{
         	 if(d.getFullName().equals("time"))
         		 break;
         	 indexOfTime++;
         	}
         	
-        	myList.get(indexOfTime).setLength(1);					//set the time dimension to 1
-        	myList.get(indexOfTime).setUnlimited(false);
-            for(Dimension d: myList)								//add the dimensions to the new file
+        	myListD.get(indexOfTime).setLength(1);					//set the time dimension to 1
+        	myListD.get(indexOfTime).setUnlimited(false);			//Must change time to be limited so that dimensions agree with calculations later
+            for(Dimension d: myListD)								//add the dimensions to the new file
             {
             	dataFile.addDimension(d.getFullName(), d.getLength(), d.isShared(), d.isUnlimited(), d.isVariableLength());
             }
-        
-            List<Variable> myListV = myDataFile.getVariables();		//add each variable into the new file
+            
+           
+            
+            List<Variable>myListV = myDataFile.getVariables();		//add each variable into the new file
+  
+            //Define VARIABLES
             for(Variable var : myListV)             
             {
-            	if(var.getShape().length < 3)
+            	
+            	if(var.getShape().length < 3 )
             	{
-            		
+            		if((var.findDimensionIndex("time"))!=-1)
+            		{
+            			var.getDimension(var.findDimensionIndex("time")).setLength(12);			//????? not sure how this works because it does not show up in the final netCDF file
+            			//System.out.println(var.getFullName()+ " the time was set");			//however it matches the dimensions when copying array values
+            		}
             	}
             	else
-            	{
             		var.getDimension(var.findDimensionIndex("time")).setLength(1);
-            	}
+            	
             	dataFile.addVariable(var.getFullName(), var.getDataType(), var.getDimensions());
-            	            	
+            	 
              	for(Attribute s : var.getAttributes())				//adds the variable attributes that are present in the given netCDF
              	{
              		if(s.getDataType() == DataType.STRING)			//String value template
@@ -529,180 +662,396 @@ public class NetCDF
              		}
              	}  	
             }
-            // create the file
-            
+          
+            //Define GLOBAL ATTRIBUTES
+            List<Attribute> AL = myDataFile.getGlobalAttributes();	//first, model all the global attributes off the first file in the filelist. Then, append the values for each attribute, separated by "; "
+            List<Attribute> tempAL = null;							
+            for(int i = 1 ; i < fileList.size() ; i++)				//skip over the first file since it is the base for the list
+            {
+            	myDataFile = NetcdfFile.open(fileList.get(i),null);	
+            	tempAL = myDataFile.getGlobalAttributes();	
+            	for(int j = 0 ; j < AL.size(); j++)					//iterate through each attribute for the AL and tempAL
+            	{
+            		Attribute a = AL.get(j);
+            		Attribute b = tempAL.get(j);
+            		if(a.getDataType()==DataType.STRING)    		//look to append attributes that hold strings		
+            		{
+            			if(a.getStringValue().equals(b.getStringValue()))	//if the values are the same for the attributes, nothing is appended
+            			{
+            				
+            			}
+            			else									//append the two attributes
+            				AL.set(j, new Attribute(a.getFullName(), a.getStringValue() +"; "+ b.getStringValue())); 
+            		}
+            		else
+            		{
+            			if(a.getNumericValue().equals(b.getNumericValue()))	//similar procedure above, however the numeric values are preserved as strings if more than one different value exists
+            			{
+            				
+            			}
+            			else
+            				AL.set(j, new Attribute(a.getFullName(), a.getNumericValue().toString() + "; "+b.getNumericValue().toString()));
+            		}
+            	}
+            }
+            for(Attribute a : AL)									//add the new Attribute List to the output file
+        	{
+        		dataFile.addGlobalAttribute(a);
+        	}
+        	
+            // create the file; definition phase is over, writing phase begins 
             dataFile.create();
+            
+  
+            
             int[] origin = new int[3];
             myListV = dataFile.getVariables();
             for(Variable var : myListV)             
-            {
-            	
+            {  	
             	if(var.getDimensions().size()==1)
             	{
-            		System.out.println(var.getFullName());
+            		//System.out.println("size 1: "+var.getFullName()+" shape: "+var.getShape()[0]);
+            		origin = new int[1];
+            		dataFile.write(var.getFullName(), generateArrayD1(var.getFullName()));
+            		
             	}
             	else if(var.getDimensions().size()==2)
             	{
-            		System.out.println(var.getFullName());
+            		//System.out.println("size 1: "+var.getFullName()+" shape: "+var.getShape()[0]+" "+var.getShape()[1]);
             		//dataFile.write(var.getFullName(),var.getShape(), generateAverageArrayD2(var.getFullName()));
+            		origin = new int[2];
+            		dataFile.write(var.getFullName(), generateArrayD2(var.getFullName()));
             	}
             	else if(var.getDimensions().size()==3)
             	{
-            		dataFile.write(var.getFullName(),origin, generateAverageArrayD3(var.getFullName()));
+            		origin = new int[3];
+            		//System.out.println("size 3: "+var.getFullName());
+            		dataFile.write(var.getFullName(), origin, generateAverageArrayD3(var.getFullName()));
             	}
-
             }
-            //dataFile.write("latitude",latData);
-          //  dataFile.write("longitude",lonData);
-            
-            // Write the pretend data to the file. Although netCDF supports
-            // reading and writing subsets of data, in this case we write all
-            // the data in one operation.
-            
-            //creating the data for latitude and longitude
-            
-            //for()
-           
-            
-            System.out.println("NetCDF file created! \"test.nc\" contains the averages of variable: "+"var"+".");
-            
-            
-          
-           /*  
-        	
-        	
-        	//coordinate attributes
-        	dataFile.addVariableAttribute("longitude", "units", "degrees_east");
-            dataFile.addVariableAttribute("latitude", "units", "degrees_north");
-            
-           
-           // myList.get(4).setVariableLength(false);
-           
-        	// define variable dimensions
-        	ArrayList<Dimension> dims =  new ArrayList<Dimension>();
-        	dims.add(tim);
-        	dims.add(lat);
-        	dims.add(lon);
-        	*/
-        	
-        	/*
-        	for(Dimension d : existingDataFile.getDimensions())
-        	{
-        		if(d.getShortName().equals("time"))
-        			dataFile.addDimension(d.getShortName(), 1 );	
-        			
-        		else
-        			dataFile.addDimension(d.getShortName(), d.getLength() );		
-        	}
-            
-*/
-        	/*
-        	System.out.println(existingDataFile.getCacheName());
-            // add the variable into the new netcdf
-        	dataFile.addVariable(var, DataType.FLOAT, dims);
-        	
-        	//adds the variable attributes that are present in the given netCDF
-        	Variable dataVar = existingDataFile.findVariable(var);
-        	for(Attribute s:dataVar.getAttributes())
-        	{
-        		if(s.getDataType() == DataType.STRING)
-        			dataFile.addVariableAttribute(var, s.getShortName(), s.getStringValue());
-        		
-        		else
-        			dataFile.addVariableAttribute(var, s.getShortName(),s.getNumericValue());
-        	}
-        	
-        	
-
-        	// This is the data array we will write. It will just be filled
-        	// with a progression of numbers for this example.
-           // ArrayFloat.D3 dataOut = new ArrayFloat.D3(  tim.getLength(),lat.getLength(), lon.getLength());
-
-            // Create some pretend data. If this wasn't an example program, we
-            // would have some real data to write, for example, model output.
-            /*int i,j;
-           
-            for (i=0; i<xDim.getLength(); i++) {
-                 for (j=0; j<yDim.getLength(); j++) {
-                     dataOut.set(i,j, i * NY + j);
-                 }
-            }*/
-           // System.out.println(tim.getLength()+" "+lat.getLength()+" "+lon.getLength());
-            /*for(int i=0; i < tim.getLength();i++)
-            {
-            	for(int j= 0 ; j < lat.getLength();j++)
-            	{
-            		for(int k = 0; k < lon.getLength();k++)
-            		{
-            			//System.out.println(i+" "+j+" "+k);
-            			dataOut.set(i,j,k, sumOfData[j][k]);
-            			//System.out.println(sumOfData[j][k]);
-            		}
-            	}
-            }*/
-            /*
-            for(Dimension d : existingDataFile.getDimensions())
-        	{
-            	try
-            	{
-        			dataFile.addDimension(d.getShortName(), d.getLength() );	
-            	}
-            	catch(Exception e)
-            	{
-            		//System.out.println("duplicate dim: "+d.getShortName());
-            	}
-        	}
-            
-            // create the file
-            dataFile.create();
-
-            
-            dataFile.write("latitude",latData);
-            dataFile.write("longitude",lonData);
-            
-            // Write the pretend data to the file. Although netCDF supports
-            // reading and writing subsets of data, in this case we write all
-            // the data in one operation.
-            
-            //creating the data for latitude and longitude
-            int[] origin = new int[3];
-            dataFile.write(var,origin, sumOfData);
-            
-            System.out.println("NetCDF file created! \"test.nc\" contains the averages of variable: "+var+".");
-*/
-            
-            
-            
-            // The file is closed no matter what by putting inside a try/catch block.
-            
-        	}
-        	
-        	catch (IOException | InvalidRangeException e) 
-        	{
-		       e.printStackTrace();
-        	} 
-        	finally 
-        	{
-        		if (null != dataFile)
-        			try 
-        			{
-    					dataFile.close();
-        			} 
-        			catch (IOException ioe) 
-        			{
-        				ioe.printStackTrace();
-        			}
-        		if (null != myDataFile)
-        			try 
-        			{
-        				myDataFile.close();
-        			} 
-        			catch (IOException ioe) 
-        			{
-        				ioe.printStackTrace();
-        			}
-        	}
+        }
+    	catch (IOException | InvalidRangeException e) 
+    	{
+	       e.printStackTrace();
+    	} 
+    	finally 
+    	{
+    		if (null != dataFile)
+    			try 
+    			{
+					dataFile.close();
+    			} 
+    			catch (IOException ioe) 
+    			{
+    				ioe.printStackTrace();
+    			}
+    		if (null != myDataFile)
+    			try 
+    			{
+    				myDataFile.close();
+    			} 
+    			catch (IOException ioe) 
+    			{
+    				ioe.printStackTrace();
+    			}
+    	}
+        System.out.println("Compiled and averaged "+fileList.size()+" files");
 	}
+	
+	
+	public static void printMeanByMonth(String fileName, String var, int month)
+	{
+		NetcdfFile dataFile = null;
+		try
+		{
+			if(month <0 || month > 11)
+			{
+				System.out.println("Invalid Month ("+month+"). Could not print mean of ("+var+").");
+				return;
+			}
+			dataFile = NetcdfFile.open(fileName);
+			Variable dataVar = dataFile.findVariable(var);
+			if(dataVar==null)
+			{
+				System.out.println("Variable not found. Could not print mean of ("+var+").");
+				return;
+			}
+			
+			int[] origin = new int[dataVar.getShape().length];
+			ArrayFloat.D3 dataArray = (D3) dataVar.read(origin, dataVar.getShape());
+			ArrayFloat.D2 varData = new ArrayFloat.D2(dataVar.getShape(1), dataVar.getShape(2));
+			for(int i=0; i < dataVar.getShape(1); i++)
+			{
+				for(int j=0; j < dataVar.getShape(2); j++)
+				{
+					varData.set(i, j, dataArray.get(month, i, j));
+				}
+			}
+			System.out.println(varData);
+			String monthString;
+			switch(month)
+			{
+			case 0: monthString= "January";
+					break;	
+			case 1: monthString= "February";
+					break;	
+			case 2: monthString= "March";
+					break;
+			case 3: monthString= "April";
+					break;
+			case 4: monthString= "May";
+					break;
+			case 5: monthString= "June";
+					break;
+			case 6: monthString= "July";
+					break;
+			case 7: monthString= "August";
+					break;
+			case 8: monthString= "September";
+					break;
+			case 9: monthString= "October";
+					break;
+			case 10: monthString= "November";
+					break;
+			case 11: monthString= "December";
+					break;
+			default: monthString= "Invalid Month";
+					break;
+			}
+			try
+			{		
+				String units = dataVar.findAttribute("units").getStringValue();
+				System.out.println("Mean of ("+var+") in "+monthString+": "+calculateMean(varData)+" "+units);
+			}
+			catch(Exception e)
+			{
+				System.out.println("Mean of ("+var+") in "+monthString+": "+calculateMean(varData));
+			}
+			
+		}
+		catch (IOException | InvalidRangeException e) 
+    	{
+	       e.printStackTrace();
+    	} 
+    	finally 
+    	{
+    		if (null != dataFile)
+			try 
+			{
+				dataFile.close();
+			} 
+			catch (IOException ioe) 
+			{
+				ioe.printStackTrace();
+			}
+    	}	
+		
+	}
+	public static void printStandardDeviationByMonth(String fileName, String var, int month)
+	{
+		NetcdfFile dataFile = null;
+		try
+		{
+			if(month <0 || month > 11)
+			{
+				System.out.println("Invalid Month ("+month+"). Could not print standard deviation of ("+var+").");
+				return;
+			}
+			dataFile = NetcdfFile.open(fileName);
+			Variable dataVar = dataFile.findVariable(var);
+			if(dataVar==null)
+			{
+				System.out.println("Variable not found. Could not print standard deviation of ("+var+").");
+				return;
+			}
+			Variable areaVar = dataFile.findVariable("area");
+			if(areaVar==null)
+			{
+				System.out.println("Could not find variable (area), the weighted mean could not be computed.");
+				return;
+			}
+			int[] origin = new int[areaVar.getShape().length];
+			ArrayFloat.D2 areaDataArray = (D2) areaVar.read(origin, areaVar.getShape());
+			ArrayFloat.D1 areaData = new ArrayFloat.D1(areaVar.getShape(1));				//latitude
+			for(int i=0; i < areaVar.getShape(1);i++)
+			{
+				areaData.set(i, areaDataArray.get(0,i));
+			}
+			
+			origin = new int[dataVar.getShape().length];
+			ArrayFloat.D3 dataArray = (D3) dataVar.read(origin, dataVar.getShape());
+			ArrayFloat.D2 varData = new ArrayFloat.D2(dataVar.getShape(1), dataVar.getShape(2));
+			for(int i=0; i < dataVar.getShape(1); i++)
+			{
+				for(int j=0; j < dataVar.getShape(2); j++)
+				{
+					varData.set(i, j, dataArray.get(month, i, j));
+				}
+			}
+			String monthString;
+			switch(month)
+			{
+			case 0: monthString= "January";
+					break;	
+			case 1: monthString= "February";
+					break;	
+			case 2: monthString= "March";
+					break;
+			case 3: monthString= "April";
+					break;
+			case 4: monthString= "May";
+					break;
+			case 5: monthString= "June";
+					break;
+			case 6: monthString= "July";
+					break;
+			case 7: monthString= "August";
+					break;
+			case 8: monthString= "September";
+					break;
+			case 9: monthString= "October";
+					break;
+			case 10: monthString= "November";
+					break;
+			case 11: monthString= "December";
+					break;
+			default: monthString= "Invalid Month";
+					break;
+			}
+			float wMean = calculateAreaWeightedMean(varData, areaData);
+			try
+			{		
+				String units = dataVar.findAttribute("units").getStringValue();
+				System.out.println("Standard Deviation of ("+var+") in "+monthString+": "+calculateStandardDeviation(varData, wMean)+" "+units);
+			}
+			catch(Exception e)
+			{
+				System.out.println("Standard Deviation of ("+var+") in "+monthString+": "+calculateStandardDeviation(varData, wMean));
+			}
+			
+		}
+		catch (IOException | InvalidRangeException e) 
+    	{
+	       e.printStackTrace();
+    	} 
+    	finally 
+    	{
+    		if (null != dataFile)
+			try 
+			{
+				dataFile.close();
+			} 
+			catch (IOException ioe) 
+			{
+				ioe.printStackTrace();
+			}
+    	}	
+	}
+	
+	
+	
+	public static void printWeightedMeanByMonth(String fileName, String var, int month)
+	{
+		NetcdfFile dataFile = null;
+		try
+		{
+			if(month <0 || month > 11)
+			{
+				System.out.println("Invalid Month ("+month+"). Could not print mean of ("+var+").");
+				return;
+			}
+			dataFile = NetcdfFile.open(fileName);
+			Variable dataVar = dataFile.findVariable(var);
+			if(dataVar==null)
+			{
+				System.out.println("Variable not found. Could not print mean of ("+var+").");
+				return;
+			}
+			Variable areaVar = dataFile.findVariable("area");
+			if(areaVar==null)
+			{
+				System.out.println("Could not find variable (area), the weighted mean could not be computed.");
+				return;
+			}
+			int[] origin = new int[areaVar.getShape().length];
+			ArrayFloat.D2 areaDataArray = (D2) areaVar.read(origin, areaVar.getShape());
+			ArrayFloat.D1 areaData = new ArrayFloat.D1(areaVar.getShape(1));				//latitude
+			for(int i=0; i < areaVar.getShape(1);i++)
+			{
+				areaData.set(i, areaDataArray.get(0,i));
+			}
+
+			origin = new int[dataVar.getShape().length];
+			ArrayFloat.D3 dataArray = (D3) dataVar.read(origin, dataVar.getShape());
+			ArrayFloat.D2 varData = new ArrayFloat.D2(dataVar.getShape(1), dataVar.getShape(2));
+			for(int i=0; i < dataVar.getShape(1); i++)
+			{
+				for(int j=0; j < dataVar.getShape(2); j++)
+				{
+					varData.set(i, j, dataArray.get(month, i, j));
+				}
+			}
+			//System.out.println(varData);
+			String monthString;
+			switch(month)
+			{
+			case 0: monthString= "January";
+					break;	
+			case 1: monthString= "February";
+					break;	
+			case 2: monthString= "March";
+					break;
+			case 3: monthString= "April";
+					break;
+			case 4: monthString= "May";
+					break;
+			case 5: monthString= "June";
+					break;
+			case 6: monthString= "July";
+					break;
+			case 7: monthString= "August";
+					break;
+			case 8: monthString= "September";
+					break;
+			case 9: monthString= "October";
+					break;
+			case 10: monthString= "November";
+					break;
+			case 11: monthString= "December";
+					break;
+			default: monthString= "Invalid Month";
+					break;
+			}
+			try
+			{		
+				String units = dataVar.findAttribute("units").getStringValue();
+				System.out.println("Area Weighted Mean of ("+var+") in "+monthString+": "+calculateAreaWeightedMean(varData, areaData)+" "+units);
+			}
+			catch(Exception e)
+			{
+				System.out.println("Area Weighted Mean of ("+var+") in "+monthString+": "+calculateAreaWeightedMean(varData, areaData)+" (units not found)");
+			}
+			
+		}
+		catch (IOException | InvalidRangeException e) 
+    	{
+	       e.printStackTrace();
+    	} 
+    	finally 
+    	{
+    		if (null != dataFile)
+			try 
+			{
+				dataFile.close();
+			} 
+			catch (IOException ioe) 
+			{
+				ioe.printStackTrace();
+			}
+    	}	
+		
+	}
+	
 	
 	public static void main(String args[])
     {
@@ -712,7 +1061,6 @@ public class NetCDF
 		try
 		{
 			Scanner s = new Scanner(new File(args[0]));
-			var=s.nextLine();
 			while(s.hasNextLine())
 			{
 				fileList.add(s.nextLine());
@@ -728,28 +1076,41 @@ public class NetCDF
 			System.out.println("Could not read filelist.txt");
 		}
 		
-		for(String s : fileList)
+		for(int i=0;i<12;i++)
 		{
-		//	parseNetCDFVar(s, var);
+			printStandardDeviationByMonth(fileList.get(0),"tgrnd",i);
 		}
-		parseNetCDFDimensions(fileList.get(0));
+		for(int i=0;i<12;i++)
+		{
+			printWeightedMeanByMonth(fileList.get(0),"tgrnd",i);
+		}
+	
 
-		NetcdfFile myn = null;
-		try {
-			myn = NetcdfFile.open("test3.nc", null);
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
-		StopWatch myWatch = new StopWatch();
 		
-		System.out.println(myn.toString());
-		/*myWatch.start();
-		writeNetCDFAverageAllVariables("test3.nc");
-		myWatch.stop();
-		System.out.println("=======done!=======");
-		System.out.println("compiled and averaged "+fileList.size()+" files, taking "+myWatch.getElapsedTime()/1000.0f+" seconds.");
-		*/
+		//parseDimensions(fileList.get(0));
+
+		//StopWatch myWatch = new StopWatch();
+		
+
+		//myWatch.start();
+		//writeNetCDFAverageAllVariables("test5.nc");
+		//myWatch.stop();
+	//	System.out.println("=======done!=======");
+		
+		/*
+		try
+		{
+			NetcdfFile myn = NetcdfFile.open(fileList.get(0), null);
+			System.out.println(myn.toString());
+			
+			Variable v = myn.findVariable("tgrnd");
+		
+		}
+		catch(Exception e)
+		{
+			
+		}*/
+		
 		//System.out.println(myn.toString());
 		//System.out.println(myn.getGlobalAttributes());
 		/*

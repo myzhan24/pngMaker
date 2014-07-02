@@ -1,0 +1,65 @@
+ //GLOBAL MEANS
+            List<Variable> myListV = myDataFile.getVariables();		//add each variable into the new file        
+           // ArrayList<Attribute> glbMeans = new ArrayList<Attribute>();
+            LinkedList<Float> glbMeans = new LinkedList<Float>();
+            for(Variable var: myListV)
+            {
+            	for(Attribute a : var.getAttributes())
+            	{
+            		if(a.getFullName().equals("glb_mean"))
+            		{
+            			try
+            			{
+            				glbMeans.add(a.getNumericValue().floatValue());
+            			}
+            			catch(Exception e)
+            			{
+            				System.out.println("Could not retrieve the glb mean from variable: " + var);
+            			}
+            		}
+            	}
+            }
+            
+            System.out.println("\n===============\n"+glbMeans.toString()+"\n===============\n");
+            
+            
+            NetcdfFile tempMeanFile = null;
+            for(int i=1; i < fileList.size(); i++)
+            {
+            	tempMeanFile = NetcdfFile.open(fileList.get(i),null);
+            	myListV = tempMeanFile.getVariables();
+            	for(Variable var: myListV)
+            	{
+            		for(int j = 0; j < var.getAttributes().size(); j++)
+            		{
+            			Attribute a = var.getAttributes().get(j);
+            			if(a.getFullName().equals("glb_mean"))
+            			{
+            				try
+            				{	
+            					
+	            				glbMeans.set(j, ( glbMeans.get(j)+ a.getNumericValue().floatValue()));
+	            				
+	            				if(var.getFullName().equals("tgrnd"))
+	            					System.out.println(glbMeans.get(j));
+            				}
+            				catch(Exception e)
+            				{
+            					
+            				}
+            			}
+            		}
+            	}
+            }
+            for(int i = 0; i < glbMeans.size(); i++)
+            {
+            	try
+            	{
+            		float total =  fileList.size();
+            		glbMeans.set(i, glbMeans.get(i)/total);
+            	}
+            	catch(Exception e)
+            	{
+            		
+            	}
+            }

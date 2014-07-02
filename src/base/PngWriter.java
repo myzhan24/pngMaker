@@ -53,7 +53,7 @@ public class PngWriter {
 	private	BufferedImage imIn = null;
 	private int width, height;
 	private static int[][] rgb;
-	private static Font mFont = new Font("Tahoma", Font.PLAIN,14); 
+	private static Font mFont = new Font("Tahoma", Font.PLAIN,13); 
 	public PngWriter()
 	{
 		
@@ -105,10 +105,10 @@ public class PngWriter {
 		bi = createBuffer(irgb,fo);
 	}
 	
-	public void createImage(int[][]irgb, File fo, String[] legend, String para)
+	public void createImage(int[][]irgb, File fo, String[] legend, String para, String units)
 	{
 		//write rgb to any location
-		bi = createBuffer(irgb,fo,legend,para);
+		bi = createBuffer(irgb,fo,legend,para,units);
 	}
 	
 	public void createImage(int[][]irgb, File fo, String[] legend)
@@ -215,7 +215,7 @@ BufferedImage buffer = new BufferedImage(irgb.length,irgb[0].length,BufferedImag
 		return buffer;
 	}
 	
-	private BufferedImage createBuffer(int[][]irgb,File f, String[] legend, String para)
+	private BufferedImage createBuffer(int[][]irgb,File f, String[] legend, String para, String units)
 	{
 		
 BufferedImage buffer = new BufferedImage(irgb.length,irgb[0].length,BufferedImage.TYPE_INT_ARGB);
@@ -246,7 +246,7 @@ BufferedImage buffer = new BufferedImage(irgb.length,irgb[0].length,BufferedImag
         int wCenter = ( irgb.length- Width) / 2;
        
        
-        g.drawString(para, wCenter, 15);
+        g.drawString(para+" ("+units+")", wCenter, 15);		//title
         for(int k = 0 ; k <legend.length; k++)
 		{
         	g.drawString(legend[k], 10+75*k, 2*irgb[0].length/3+15);
@@ -627,6 +627,15 @@ BufferedImage buffer = new BufferedImage(irgb.length,irgb[0].length,BufferedImag
 		return ret;
 	}
 	
+	/**
+	 * this function is a slower method and obsolete
+	 * @param ar
+	 * @param scale
+	 * @param expo
+	 * @param numNearest
+	 * @param percent
+	 * @return
+	 */
 	public static ArrayFloat.D2 generateIDWArrayNeighbor(ArrayFloat.D2 ar, int scale, int expo,int numNearest, float percent)
 	{
 		int[] baseShape = ar.getShape();
@@ -680,7 +689,14 @@ BufferedImage buffer = new BufferedImage(irgb.length,irgb[0].length,BufferedImag
 		return ret;
 	}
 	
-	
+	/**
+	 * method used by obsolete method to determine if points coincide within a float coordinate system
+	 * @param r
+	 * @param c
+	 * @param myFCS
+	 * @param numNearest
+	 * @return
+	 */
 	public static FloatCoordinateSystem determineNeighbors(float r, float c,FloatCoordinateSystem myFCS, int numNearest)
 	{
 		FloatCoordinateSystem ret = new FloatCoordinateSystem(myFCS, false);
@@ -789,9 +805,10 @@ BufferedImage buffer = new BufferedImage(irgb.length,irgb[0].length,BufferedImag
 		{
 			Scanner scanner = new Scanner( System.in );
 			
-			String filename = "test3.nc";
+			String filename = "test5.nc";
 			boolean cont=true;
 			boolean restart=false;
+			System.out.println("Welcome to the NetCDF PNG Maker\n");
 			while(cont)
 			{
 				restart=false;
@@ -800,17 +817,33 @@ BufferedImage buffer = new BufferedImage(irgb.length,irgb[0].length,BufferedImag
 			
 			dataFile =  NetcdfFile.open(filename, null);
 			List<Variable> myL = dataFile.getVariables();
-			System.out.print("Type variable name or la to list all varibles: ");
+			System.out.print("Type variable name, \"la\" to list all varibles, or \"quit\": ");
 			String input = scanner.nextLine();
-			if(input.equals("la"))
+			if(input.equals("quit"))
 			{
-				System.out.println("\n=======all variables=======");
+				cont=false;
+				restart=true;
+			}
+			else if(input.equals("la"))
+			{
+				System.out.println("\n"+filename+" contains "+dataFile.getVariables().size()+" variables.");
+				System.out.println("==========================================================================");
+				System.out.println("=== Variable =============== Description =================================");
+				System.out.println("==========================================================================");
 				for(Variable s: myL)
-					System.out.println(s.getFullName()+":                    \t"+s.getDescription());
+				{
+					System.out.print(s.getFullName()+":");
+						for(int a = 0; a < 20-s.getFullName().length();a++)
+							System.out.print(" ");
+					
+					System.out.println("\t"+s.getDescription());
+				}
 				
 				restart=true;
 				cont=true;
-				System.out.println("=======all variables=======\n");
+				System.out.println("==========================================================================");
+				System.out.println("=== Variable =============== Description =================================");
+				System.out.println("==========================================================================\n");
 			}
 			
 			if(restart==false)
@@ -861,7 +894,7 @@ BufferedImage buffer = new BufferedImage(irgb.length,irgb[0].length,BufferedImag
 			float min = findMinVal(myF);
 			
 			//create a PngColor
-			PngColor col = new PngColor(min,max,var);
+			PngColor col = new PngColor(min,max,var,dataVar.getUnitsString());
 			
 			
 			rgb = new int[shape[2]][shape[1]];
@@ -874,7 +907,8 @@ BufferedImage buffer = new BufferedImage(irgb.length,irgb[0].length,BufferedImag
 			}
 			PngWriter png1 = new PngWriter(outfilename,(shape[1]),(shape[0]));
 			
-			//col.myCreateLegend("legend.png");	//create a legend
+			col.myCreateLegend(outfilename+" LEGEND.png",var);	//create a legend
+			
 			
 			//rgb for base image
 			/*
@@ -888,15 +922,16 @@ BufferedImage buffer = new BufferedImage(irgb.length,irgb[0].length,BufferedImag
 				}
 			}			*/
 			
-			int scale =8;
+			int scale =4;
 			int expo = 1;
-			float threshold = 1.15f;
+			float threshold = 2f;
 			StopWatch myWatch = new StopWatch();
 			
 			
 				myWatch.start();
 				ArrayFloat.D2 IDWArray = generateIDWArrayMin(myF, scale, expo, threshold);
 				shape = IDWArray.getShape();
+				//col= new PngColor(findMinVal(IDWArray),findMaxVal(IDWArray),var);
 				
 				//rgb for IDW generated image
 				rgb = new int[shape[1]][shape[0]];
@@ -907,11 +942,13 @@ BufferedImage buffer = new BufferedImage(irgb.length,irgb[0].length,BufferedImag
 						rgb[i][j]=col.getColorRGB(IDWArray.get((shape[0]-1)-j,i));
 					}
 				}
+				
 				PngWriter png2 = new PngWriter(outfilename+"x"+scale,(shape[1]),(shape[0]));
+				//col.myCreateLegend(outfilename+" LEGENDx8.png");
 				myWatch.stop();
 				System.out.println("\ndone!\n");
-				System.out.println("Images: "+outfilename+".png and "+outfilename+"x"+scale+".png created!");
-				System.out.println("=======time report=======");				System.out.println("Time: "+myWatch.getElapsedTime()+"ms");
+				System.out.println("Images: "+outfilename+".png, "+outfilename+"x"+scale+".png, and "+outfilename+" LEGEND"+".png created!");
+				System.out.println("=======time report=======");				System.out.println("Time: "+myWatch.getElapsedTime()/1000f+ "s");
 				System.out.println("scale: "+scale+"\tthreshold: "+String.format("%1.2f", threshold));
 				System.out.println("=======time report=======\n\n");				myWatch.reset();
 			}

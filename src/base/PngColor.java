@@ -15,6 +15,7 @@ public class PngColor {
 	private float max; 
 	private float min;
 	private String para;
+	private String units;
 	//= Color.HSBtoRGB(0f, 0.938f, 90);
 	//Color nRGB = new Color((rgb));
 	private int[][] legendMap = new int[510][60];
@@ -36,11 +37,12 @@ public class PngColor {
 		this.min = inMin;
 	}
 	
-	public PngColor(float inMin, float inMax, String para)
+	public PngColor(float inMin, float inMax, String para,String units)
 	{
 		this.max = inMax;
 		this.min = inMin;
 		this.para = para;
+		this.units=units;
 	}
 	
 	public void trans(double left , double right, double up, double down)
@@ -95,13 +97,13 @@ public class PngColor {
 		else
 			pg.createImage(this.legendMap, legend,lengNum);
 	}*/
-	public void myCreateLegend(String location)
+	public void myCreateLegend(String location, String var)
 	{
 		for(int i=0 ; i <legendMap.length; i++)
 		{
 			for(int j=0; j< legendMap[i].length; j++)
 			{
-				if(i<10||i>502)
+				if(i<10||i>500)
 					legendMap[i][j]=-1;
 				else{
 				float normal =(float) ((i-10)*1.0/(legendMap.length-20));
@@ -112,16 +114,22 @@ public class PngColor {
 		
 		File legend = new File(location);
 		PngWriter pg = new PngWriter();
-		//String[] lengNum = new String[7];
+		String[] lengNum = new String[7];
 		//System.out.println(""+this.max+" "+this.min+" "+(this.max-this.min));
 		for(int k = 0 ; k <lengNum.length; k++)
 		{
 			float inLegend =  this.min+(this.max-this.min)/6f*k;
-			DecimalFormat myformat=new DecimalFormat("0.000"); 
+			DecimalFormat myformat=null;
+			if(Math.abs(inLegend) > 100000)
+				 myformat = new DecimalFormat("0.000E0");	//correcting the format of excessively large numbers
+			
+			else
+				 myformat=new DecimalFormat("0.000"); 
+			
 			lengNum[k] = (myformat.format(inLegend));
 		}
 		if(this.para!=null)
-		pg.createImage(this.legendMap, legend,lengNum,para);
+		pg.createImage(this.legendMap, legend,lengNum,para,units);
 		else
 			pg.createImage(this.legendMap, legend,lengNum);
 	}
