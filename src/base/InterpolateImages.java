@@ -57,7 +57,7 @@ public class InterpolateImages {
 	}
 	
 	  public static void main(String args[]){
-		 // InterpolateImages outimage = new InterpolateImages("F:\\workspace\\ClimateViz\\20110830\\ij_map1\\Surface Air Temperature, mean.png",50);
+		  InterpolateImages outimage = new InterpolateImages("F:\\workspace\\ClimateViz\\20110830\\ij_map1\\Surface Air Temperature, mean.png",50);
 		  
 	  }
 

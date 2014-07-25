@@ -594,14 +594,14 @@ public class NetCDF
 	 * This function averages all variables for all files present in filelist.txt over its time dimension as long as the variable has a time dimension.
 	 * @param fileName	output filename, requires ".nc" to be present for a correct output file format
 	 */
-	public static void writeNetCDFAverageAllVariables(String fileName)
+	public static void writeNetCDFAverageAllVariables(ArrayList<String> files ,String fileName)
 	{
         NetcdfFileWriteable dataFile = new NetcdfFileWriteable();	//Create the file
         NetcdfFile myDataFile = null;								//reference file
         
         try {
         	dataFile = NetcdfFileWriteable.createNew(fileName, false);
-        	myDataFile = NetcdfFile.open(fileList.get(0), null);
+        	myDataFile = NetcdfFile.open(files.get(0), null);
         	
         	//Define DIMENSIONS
         	List<Dimension> myListD = myDataFile.getDimensions();	//Global Dimensions of the new file

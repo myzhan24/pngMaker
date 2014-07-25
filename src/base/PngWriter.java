@@ -801,9 +801,38 @@ BufferedImage buffer = new BufferedImage(irgb.length,irgb[0].length,BufferedImag
 	
 	 public static void main(String[] args){
 		NetcdfFile dataFile = null;
+		Scanner scanner = null;
+		//ALTER AVG TO WRITE ONLY ONE VARIABLE
+		
+		
+		//LEGEND MAKER FUNCTION
+		//legend to accomodate many things over time 12 months same legend
+		
+		
+		// NETCDF FUNCTION
+		//function to store interpolated data into a new net cdf  ( 2 types)
+		
+		
+		
+		// .gif MAKER FUNCTION
+		// .gif maker Inputs: arraylist of file names, output name
+		// outputs: .gif
+		
+		
+		
+		// PNG MAKER FUNCTION
+		// inputs 
+				//file name
+				//check time dimension
+				// variable
+				// output type
+				// scale
+				// interpolation
+				
+				//outputs multiple .png or animated .gif
 		try
 		{
-			Scanner scanner = new Scanner( System.in );
+			scanner = new Scanner( System.in );
 			
 			String filename = "test5.nc";
 			boolean cont=true;
@@ -922,7 +951,7 @@ BufferedImage buffer = new BufferedImage(irgb.length,irgb[0].length,BufferedImag
 				}
 			}			*/
 			
-			int scale =4;
+			int scale =50;
 			int expo = 1;
 			float threshold = 2f;
 			StopWatch myWatch = new StopWatch();
@@ -980,6 +1009,15 @@ BufferedImage buffer = new BufferedImage(irgb.length,irgb[0].length,BufferedImag
 		     ioe.printStackTrace();
 		   }
 		   
+		   if(scanner!=null)
+		   {
+			   try{
+				   scanner.close();
+			   } catch (Exception e)
+			   {
+				   
+			   }
+		   }
 		 
 		}
 		
